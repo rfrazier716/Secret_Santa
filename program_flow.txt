@@ -1,16 +1,18 @@
 >flow of match engine
-check that current row has options to pick
-	T> 	Check that all rows have options to pick
-		T> 	
-		Assign a player match
-			write that match to the stack
-			write x80
+>If you ever get an index error pulling from the stack there are no valid options and search has exhausted the space
+Check that all rows have options to pick
+T> 	Assign a player match
+	write that match to the stack
+	write x80
+	write nulled indices to stack
+	increment player number
 
-		F> 	Pull last changes from stack
-			pull one more off of stack (this is how many choices have been made for this row)
+F> 	Pull changes from stack until you pull 0x8000
+	decrement player number
+	for every change write a 1 to that indice in the target matrix
 
-	
-	F>	
+
+
 
 every iteration through loop can do one of two options:
 	make a match
@@ -35,30 +37,17 @@ when undoing a match
 
 what happens when we have to go up a branch?
 
-Stack Structure
-|xy0|	match that was made
-|x8 |
-||	second attempted match that was made
-||
-|| <-- how many choices have been made with this row
-||
-||    indices of matrix that were zero'd
-||
-||
-||
-||
-||
-||
-||	number of indices that were zero'd
+Stack flow
+0xX0Y0 	<-what decision was made for this branch
+0x8000 	<-Divider for pulling from stack
+0xRRCC	<-an indice that was zerod
+0xRRCC
+0xRRCC
+0xRRCC
+0xRRCC	<-divider for pulling from stack
+---		in between this we've commited a match
 
-
-x0
-y0
-1
-zx0
-zy0
-zx1
-zy1
+	
 
 what if used 16 bit numbers (allows for 128 players)
 0b1[XXXXXXX]_[XXXXXXX]
