@@ -1,6 +1,7 @@
 
 import numpy as np
 import sys
+import json
 from pathlib import Path
 
 
@@ -8,8 +9,8 @@ g_debug=False
 
 class Player(object):
 	def __init__(self,first_name,last_name,email,blacklist):
-		self.first_name
-		self.last_name
+		self.first_name=first_name
+		self.last_name=last_name
 		self.name=self.first_name+" "+self.last_name
 		self.email=email
 		self.blacklist=blacklist
@@ -22,27 +23,27 @@ class MatchEngine():
 	def __init__(self,mutual_exclusion:True):
 		self.mutual_exclusion=mutual_exclusion
 		self.players=[] #List of the players
+		self.player_match_list=[]
 
 	def n_players(self):
 		#Returns the number of players in the game
 		return len(self.players)
 
-	def load_players(self,player_list_file):
-		self.players=[1,2,3,4,5]
-		self.build_target_matrix()
-		pass
-		#TODO: make it load the players from a .json file
-		#Also call the "build_target_matrix" function
+	def import_players(self,players):
+		self.players=players #Load players
+		self.build_target_matrix()	#build target_matrix from player list
 	
 	def build_target_matrix(self):
-		#
-		self.target_matrix=np.array([
-				[0,1,0,1,0],
-				[1,0,1,0,0],
-				[0,0,0,1,1],
-				[1,1,0,0,1],
-				[1,0,1,1,0]
-				])
+		self.target_matrix=np.ones(self.n_players(),dtype=int)-np.eye(self.n_players(),dtype=int)	#Make a matrix of 1's the size of the number of self.players but set it so no player can be assigned themselves
+		player_names=[player.name for player in self.players]
+		for row in range(len(self.players)):
+			for blacklisted_player in self.players[row].blacklist:
+				try:
+					column=player_names.index(blacklisted_player) #find the index of the blacklisted target in the list
+					self.target_matrix[row,column]=0	#write a zero to that index in the target matrix
+				except ValueError: #if the player could not be found, raise an error saying as much
+					raise ValueError("Player in blacklist Does not exist, Verify correct spelling")
+		return self.target_matrix
 
 	def encode_index(self,index):
 		#accepts a tuple that is the row column value
@@ -85,6 +86,9 @@ class MatchEngine():
 				row,column=self.decode_index(stack_value)
 				self.target_matrix[row,column]=1
 
+	def print_matches(self):
+		for n in range(len(self.player_match_list)):
+			print(self.players[n]+" was assigned "+self.players[self.player_match_list[n]])
 
 	def print_stack(self):
 		for val in self.stack:
@@ -118,15 +122,35 @@ class MatchEngine():
 			#self.print_stack()
 			#print("")
 
-		sorted_matches=[match_list[index] for index in player_sort_indices] #change the match list back to its original order
-		return sorted_matches #return the list of matches
+		self.player_match_list=[match_list[index] for index in player_sort_indices] #change the match list back to its original order
+		for j in range(self.n_players()):
+			self.players[j].target=self.players[self.player_match_list[j]].name
+		return self.player_match_list #return the list of matches
 
-def import_player_list(file):
-	pass
+def import_player_list(f_player_list):
+	players=[]
+	with open(f_player_list) as json_file:
+		data=json.load(json_file)
+		for entry in data:
+			players.append(Player(
+				entry['first_name'],
+				entry['last_name'],
+				entry['email'],
+				entry['blacklist']
+				))
+	return players
 
 def main():
-	player_list_file=Path(sys.argv[0]) / 'private' / 'player_list.json'
+	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
 	players=import_player_list(player_list_file)
+	engine=MatchEngine(False)
+	engine.import_players(players)
+	engine.match_all_players()
+	for player in players:
+		print(player.target)
+	
+
+	
 
 if __name__=='__main__':
 	main()
