@@ -8,20 +8,23 @@ from pathlib import Path
 g_debug=False
 
 class Player(object):
-	def __init__(self,first_name,last_name,email,blacklist):
+	def __init__(self,first_name,last_name,email,**kwargs):
 		self.first_name=first_name
 		self.last_name=last_name
 		self.name=self.first_name+" "+self.last_name
 		self.email=email
-		self.blacklist=blacklist
 		self.target=""
+
+		#Additional Optional arguments
+		self.whitelist=kwargs.get('whitelist',[])
+		self.blacklist=kwargs.get('blacklist',[])
 
 class MatchEngine():
 	ENCODED_PLAYER_WIDTH=7	#how many bits are designated for player indices
 	STACK_DIVIDER=0x1<<(2*ENCODED_PLAYER_WIDTH+1)	#Value written to stack to tell program to stop pulling
 
-	def __init__(self,mutual_exclusion:True):
-		self.mutual_exclusion=mutual_exclusion
+	def __init__(self,**kwargs):
+		self.mutual_exclusion=kwargs.get('exclusion',False)	#If exclusion is set to players cannot be assigned each other
 		self.players=[] #List of the players
 		self.player_match_list=[]
 
@@ -37,12 +40,22 @@ class MatchEngine():
 		self.target_matrix=np.ones(self.n_players(),dtype=int)-np.eye(self.n_players(),dtype=int)	#Make a matrix of 1's the size of the number of self.players but set it so no player can be assigned themselves
 		player_names=[player.name for player in self.players]
 		for row in range(len(self.players)):
-			for blacklisted_player in self.players[row].blacklist:
-				try:
-					column=player_names.index(blacklisted_player) #find the index of the blacklisted target in the list
-					self.target_matrix[row,column]=0	#write a zero to that index in the target matrix
-				except ValueError: #if the player could not be found, raise an error saying as much
-					raise ValueError("Player in blacklist Does not exist, Verify correct spelling")
+			if not self.players[row].whitelist: #If a whitelist isn't defined build matrix based on blacklist
+				for blacklisted_player in self.players[row].blacklist:
+					try:
+						column=player_names.index(blacklisted_player) #find the index of the blacklisted target in the list
+						self.target_matrix[row,column]=0	#write a zero to that index in the target matrix
+					except ValueError: #if the player could not be found, raise an error saying as much
+						raise ValueError("Player in blacklist does not exist. Verify correct spelling")
+			else:	#If a whitelist has been defined it overrides any blacklist preferences
+				self.target_matrix[row,:]=0	#set target matrix to zero because only whitelisted players are allowed as a match
+				for whitelisted_player in self.players[row].whitelist:
+					try:
+						column=player_names.index(whitelisted_player) #find the index of the whitelisted target in the list
+						self.target_matrix[row,column]=1	#write a zero to that index in the target matrix
+					except ValueError: #if the player could not be found, raise an error saying as much
+						raise ValueError("Player in Whitelist does not exist. Verify correct spelling")
+
 		return self.target_matrix
 
 	def encode_index(self,index):
@@ -99,7 +112,12 @@ class MatchEngine():
 		
 		#Sort target matrix from least to greatest number of potential matches
 		player_sort_indices=np.argsort(np.sum(self.target_matrix,1)) # The player indices sorted by number of matches
+		#print(player_sort_indices)
+		#print([player.name for player in self.players])
+		#print([self.players[index].name for index in player_sort_indices])
+		#print(self.target_matrix)
 		self.target_matrix=self.target_matrix[player_sort_indices,:] #Rearrange the target matrix from fewest to largest matches
+		#print(self.target_matrix)
 		player_to_match=0 #which player is currently being assigned a target
 		match_list=[]	#List that keeps track of who matched with who, needs to be reordered after all matches are assigned
 		self.stack=[]	#empty the stack
@@ -121,10 +139,10 @@ class MatchEngine():
 			#print("player:{}\tCurrent Stack".format(player_to_match))
 			#self.print_stack()
 			#print("")
-
+		print
 		self.player_match_list=[match_list[index] for index in player_sort_indices] #change the match list back to its original order
 		for j in range(self.n_players()):
-			self.players[j].target=self.players[self.player_match_list[j]].name
+			self.players[player_sort_indices[j]].target=self.players[match_list[j]].name
 		return self.player_match_list #return the list of matches
 
 def import_player_list(f_player_list):
@@ -133,21 +151,25 @@ def import_player_list(f_player_list):
 		data=json.load(json_file)
 		for entry in data:
 			players.append(Player(
-				entry['first_name'],
-				entry['last_name'],
-				entry['email'],
-				entry['blacklist']
+				entry.get('first_name'),
+				entry.get('last_name'),
+				entry.get('email'),
+				blacklist=entry.get('blacklist',[]),
+				whitelist=entry.get('whitelist',[])
 				))
 	return players
+
+def print_targets(players):
+	for player in players:
+		print(player.name+" is assigned "+player.target)
 
 def main():
 	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
 	players=import_player_list(player_list_file)
-	engine=MatchEngine(False)
+	engine=MatchEngine()
 	engine.import_players(players)
 	engine.match_all_players()
-	for player in players:
-		print(player.target)
+	print_targets(players)
 	
 
 	
