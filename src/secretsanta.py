@@ -188,22 +188,7 @@ def verify_unique_targets(players):
 		return True
 	else:
 		return False
-
-def main():
-	#Import player list and assign matches
-	print("Loading Player list")
-	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
-	players=import_player_list(player_list_file)
-	print("Assigning Targets to players")
-	engine=MatchEngine(exclusion=True)
-	engine.import_players(players)
-	engine.match_all_players()
-	unique_targets=verify_unique_targets(players)
-	if not unique_targets:
-		raise ValueError("Player Targets are not unique")
-	else:
-		print("Verified all targets are unique\n")
-	
+def email_player_matches(players):
 	#Connect to gmail
 	print("Connecting to Gmail via SMTP")
 	f_credentials=Path(sys.path[0]) / 'private' / 'gmail_credentials.json'
@@ -220,7 +205,24 @@ def main():
 	print("Closing SMTP Connection")
 	server.close()
 
-	
+def main():
+	#Import player list and assign matches
+	print("Loading Player list")
+	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
+	players=import_player_list(player_list_file)
+	print("Assigning Targets to players")
+	engine=MatchEngine(exclusion=True)
+	engine.import_players(players)
+	engine.match_all_players()
+	unique_targets=verify_unique_targets(players)
+	if not unique_targets:
+		raise ValueError("Player Targets are not unique")
+	else:
+		print("Verified all targets are unique\n")
+	mail_matches=input("Do you want to email players their matches (y/n)?")
+	if mail_matches=="y":
+		email_player_matches(players)
+
 
 if __name__=='__main__':
 	main()
