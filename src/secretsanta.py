@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import json
 from pathlib import Path
+import gmailsmtp as gm
 
 
 g_debug=False
@@ -76,6 +77,13 @@ class MatchEngine():
 		self.stack.append(stack_value)	
 		self.stack.append(self.STACK_DIVIDER)	#Write stack divider value
 
+		#if mutual_exclusion flag is set modify matrix to target cannot be assigned player
+		if self.mutual_exclusion:
+			if self.target_matrix[target,player]==1:
+				self.target_matrix[target,player]=0	#null out this option
+				stack_value=self.encode_index((target,player))	#Push Value to stack
+				self.stack.append(stack_value)
+
 		#Update target matrix so no other players can be assigned the same target
 		for j in range(player+1,self.n_players()): 
 			if self.target_matrix[j,target]==1: #check if index is even a potential match
@@ -107,16 +115,11 @@ class MatchEngine():
 		for val in self.stack:
 			print("{:04X}".format(val))
 
-	def match_all_players(self):
-		#returns a list of all matches such that player[n] is matched to player[list[n]]
-		
+	def match_all_players(self):		
 		#Sort target matrix from least to greatest number of potential matches
 		player_sort_indices=np.argsort(np.sum(self.target_matrix,1)) # The player indices sorted by number of matches
-		#print(player_sort_indices)
-		#print([player.name for player in self.players])
-		#print([self.players[index].name for index in player_sort_indices])
-		#print(self.target_matrix)
-		self.target_matrix=self.target_matrix[player_sort_indices,:] #Rearrange the target matrix from fewest to largest matches
+		self.target_matrix=self.target_matrix[player_sort_indices,:] #Rearrange rows by fewest to largest matches
+		self.target_matrix=self.target_matrix[:,player_sort_indices] #Rearrange columns by fewest to largest matches
 		#print(self.target_matrix)
 		player_to_match=0 #which player is currently being assigned a target
 		match_list=[]	#List that keeps track of who matched with who, needs to be reordered after all matches are assigned
@@ -126,7 +129,10 @@ class MatchEngine():
 			#Check if a valid solution space still exists
 			if np.in1d(np.sum(self.target_matrix[player_to_match:],1),0).any():	#if the sum of options for any remaining players is zero
 				#Solution space is no longer valid, revert to a previous choice
-				match_list.pop(-1)
+				try:
+					match_list.pop(-1)
+				except IndexError:
+					raise IndexError("Tried to pull from empty stack. Solution does not exist")
 				self.undo_last_match()
 				player_to_match-=1
 			else:
@@ -139,11 +145,10 @@ class MatchEngine():
 			#print("player:{}\tCurrent Stack".format(player_to_match))
 			#self.print_stack()
 			#print("")
-		print
 		self.player_match_list=[match_list[index] for index in player_sort_indices] #change the match list back to its original order
 		for j in range(self.n_players()):
-			self.players[player_sort_indices[j]].target=self.players[match_list[j]].name
-		return self.player_match_list #return the list of matches
+			self.players[player_sort_indices[j]].target=self.players[player_sort_indices[match_list[j]]].name
+		return [(player.name,player.target) for player in self.players] #return the list of matches
 
 def import_player_list(f_player_list):
 	players=[]
@@ -163,14 +168,57 @@ def print_targets(players):
 	for player in players:
 		print(player.name+" is assigned "+player.target)
 
+def email_player_target(player,server):
+	server.sendmail(
+  	server.email_address, 
+	player.email,
+ 	'''
+ 	Ho Ho Hello Santas!,
+ 	your target is below, let the give giving begin!
+
+ 	{}, You have been assigned: {}
+
+ 	-Fotonix
+ 	'''.format(player.first_name,player.target)
+ 	)
+
+def verify_unique_targets(players):
+	targets=[player.target for player in players]
+	if len(set(targets))==len(targets):
+		return True
+	else:
+		return False
+
 def main():
+	#Import player list and assign matches
+	print("Loading Player list")
 	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
 	players=import_player_list(player_list_file)
-	engine=MatchEngine()
+	print("Assigning Targets to players")
+	engine=MatchEngine(exclusion=True)
 	engine.import_players(players)
 	engine.match_all_players()
-	print_targets(players)
+	unique_targets=verify_unique_targets(players)
+	if not unique_targets:
+		raise ValueError("Player Targets are not unique")
+	else:
+		print("Verified all targets are unique\n")
 	
+	#Connect to gmail
+	print("Connecting to Gmail via SMTP")
+	f_credentials=Path(sys.path[0]) / 'private' / 'gmail_credentials.json'
+	server=gm.GmailServer()
+	server.login(f_credentials)	
+	print("Connected and Logged in")
+
+	#Email every player
+	for player in players:
+		print("Emailing "+player.name)
+		email_player_target(player,server)
+
+	#Cleanup
+	print("Closing SMTP Connection")
+	server.close()
 
 	
 
