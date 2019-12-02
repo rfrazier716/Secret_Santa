@@ -7,6 +7,7 @@ import gmailsmtp as gm
 
 
 g_debug=False
+g_software_version="1.0"
 
 class Player(object):
 	def __init__(self,first_name,last_name,email,**kwargs):
@@ -206,6 +207,7 @@ def email_player_matches(players):
 	server.close()
 
 def main():
+	print("Secret Santa v"+g_software_version)
 	#Import player list and assign matches
 	print("Loading Player list")
 	player_list_file=Path(sys.path[0]) / 'private' / 'player_list.json'
